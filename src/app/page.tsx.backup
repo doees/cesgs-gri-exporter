@@ -39,42 +39,6 @@ function compareGriCode(a: string, b: string): number {
   return 0;
 }
 
-function cleanJsonCandidate(candidate: string): string {
-  let output = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < candidate.length; i++) {
-    const char = candidate[i];
-
-    if (inString) {
-      if (escaped) {
-        output += char;
-        escaped = false;
-      } else if (char === "\\") {
-        output += char;
-        escaped = true;
-      } else if (char === '"') {
-        output += char;
-        inString = false;
-      } else if (char === "\n" || char === "\r" || char === "\t") {
-        output += " ";
-      } else {
-        output += char;
-      }
-      continue;
-    }
-
-    output += char;
-
-    if (char === '"') {
-      inString = true;
-    }
-  }
-
-  return output;
-}
-
 function parseMultipleJsonArrays(input: string): RowData[] {
   const text = input.trim();
 
@@ -109,17 +73,9 @@ function parseMultipleJsonArrays(input: string): RowData[] {
     }
 
     if (char === "[") {
-      const nextNonSpace = text.slice(i + 1).match(/\S/);
-      const nextChar = nextNonSpace?.[0];
-
-      if (depth === 0 && nextChar !== "{" && nextChar !== "]") {
-        continue;
-      }
-
       if (depth === 0) {
         start = i;
       }
-
       depth++;
       continue;
     }
@@ -145,8 +101,7 @@ function parseMultipleJsonArrays(input: string): RowData[] {
 
   candidates.forEach((candidate, index) => {
     try {
-      const cleanedCandidate = cleanJsonCandidate(candidate);
-      const parsed = JSON.parse(cleanedCandidate);
+      const parsed = JSON.parse(candidate);
 
       if (!Array.isArray(parsed)) {
         return;
@@ -172,7 +127,6 @@ function parseMultipleJsonArrays(input: string): RowData[] {
 
   return validRows;
 }
-
 
 function buildQaLog(rows: RowData[]) {
   const qaLog: Array<{
