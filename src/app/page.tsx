@@ -40,80 +40,92 @@ function compareGriCode(a: string, b: string): number {
 }
 
 function parseMultipleJsonArrays(input: string): RowData[] {
-  const trimmed = input.trim();
-  if (!trimmed) {
+  const text = input.trim();
+
+  if (!text) {
     throw new Error("Input kosong.");
   }
 
-  const normalized = trimmed.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const candidates: string[] = [];
 
-  const chunks = normalized
-    .split(/\]\s*\n*\s*\[/)
-    .map((chunk, index, arr) => {
-      if (arr.length === 1) return chunk;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
 
-      if (index === 0) return `${chunk}]`;
-      if (index === arr.length - 1) return `[${chunk}`;
-      return `[${chunk}]`;
-    });
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
 
-  const parsedArrays = chunks.map((chunk, idx) => {
-    try {
-      const parsed = JSON.parse(chunk);
-      if (!Array.isArray(parsed)) {
-        throw new Error(`Blok JSON ke-${idx + 1} bukan array.`);
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
       }
-      return parsed as RowData[];
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "[") {
+      if (depth === 0) {
+        start = i;
+      }
+      depth++;
+      continue;
+    }
+
+    if (char === "]") {
+      if (depth > 0) {
+        depth--;
+
+        if (depth === 0 && start !== -1) {
+          candidates.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    throw new Error("Tidak ditemukan JSON array valid. Pastikan output mengandung blok [ ... ].");
+  }
+
+  const validRows: RowData[] = [];
+  const errors: string[] = [];
+
+  candidates.forEach((candidate, index) => {
+    try {
+      const parsed = JSON.parse(candidate);
+
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      const objectRows = parsed.filter(
+        (item) => item && typeof item === "object" && !Array.isArray(item)
+      ) as RowData[];
+
+      if (objectRows.length > 0) {
+        validRows.push(...objectRows);
+      }
     } catch (error) {
-      throw new Error(
-        `Blok JSON ke-${idx + 1} tidak valid. ${(error as Error).message}`
-      );
+      errors.push(`Blok ke-${index + 1}: ${(error as Error).message}`);
     }
   });
 
-  return parsedArrays.flat();
-}
+  if (validRows.length === 0) {
+    throw new Error(
+      `Tidak ada JSON array yang berhasil diproses. Detail error: ${errors.join(" | ")}`
+    );
+  }
 
-function buildQaLog(rows: RowData[]) {
-  const qaLog: Array<{
-    severity: "WARN" | "ERROR";
-    message: string;
-    gri_code: string;
-    field: string;
-  }> = [];
-
-  rows.forEach((row) => {
-    const griCode = String(row.gri_code ?? "");
-
-    if (!String(row.gri_code ?? "").trim()) {
-      qaLog.push({
-        severity: "ERROR",
-        message: "Missing gri_code",
-        gri_code: "",
-        field: "gri_code",
-      });
-    }
-
-    if (!String(row.evidence_page ?? "").trim()) {
-      qaLog.push({
-        severity: "WARN",
-        message: "Missing evidence_page",
-        gri_code: griCode,
-        field: "evidence_page",
-      });
-    }
-
-    if (!String(row.disclosure_type ?? "").trim()) {
-      qaLog.push({
-        severity: "WARN",
-        message: "Missing disclosure_type",
-        gri_code: griCode,
-        field: "disclosure_type",
-      });
-    }
-  });
-
-  return qaLog;
+  return validRows;
 }
 
 function buildSummary(rows: RowData[], qaLog: ReturnType<typeof buildQaLog>) {
