@@ -128,6 +128,48 @@ function parseMultipleJsonArrays(input: string): RowData[] {
   return validRows;
 }
 
+function buildQaLog(rows: RowData[]) {
+  const qaLog: Array<{
+    severity: "WARN" | "ERROR";
+    message: string;
+    gri_code: string;
+    field: string;
+  }> = [];
+
+  rows.forEach((row) => {
+    const griCode = String(row.gri_code ?? "");
+
+    if (!String(row.gri_code ?? "").trim()) {
+      qaLog.push({
+        severity: "ERROR",
+        message: "Missing gri_code",
+        gri_code: "",
+        field: "gri_code",
+      });
+    }
+
+    if (!String(row.evidence_page ?? "").trim()) {
+      qaLog.push({
+        severity: "WARN",
+        message: "Missing evidence_page",
+        gri_code: griCode,
+        field: "evidence_page",
+      });
+    }
+
+    if (!String(row.disclosure_type ?? "").trim()) {
+      qaLog.push({
+        severity: "WARN",
+        message: "Missing disclosure_type",
+        gri_code: griCode,
+        field: "disclosure_type",
+      });
+    }
+  });
+
+  return qaLog;
+}
+
 function buildSummary(rows: RowData[], qaLog: ReturnType<typeof buildQaLog>) {
   const company = String(rows[0]?.company ?? "");
   const fy = String(rows[0]?.fy ?? "");
